@@ -25,6 +25,8 @@
 5. 在左侧输入 DeepSeek API Key，输入完整专利公开号，例如 `US7654321B2`，点击“开始分析”。
 6. 查看原文、AI 解释，下载 `.md` 文件。
 
+如果自动获取时遇到 Google Patents 的 503 错误，程序会短暂重试两次。仍无法读取时，选择“手动粘贴原文”，打开原文页面，将同一篇专利的标题、摘要和第一项权利要求复制到对应输入框，再点击“开始分析”。第一项权利要求可留空；此时解读只会依据摘要。若浏览器也无法打开原文，请稍后重试，不要自行编造内容。
+
 如 `py` 不可用，把上述 `py` 改为 `python`。首次安装依赖需要网络。停止服务：终端中按 Ctrl+C。
 
 ## API Key 的安全保存方式（可选）
@@ -38,10 +40,11 @@
 `patent_core.py` 负责：
 
 1. `normalize_patent_id`：检查并标准化公开号/链接
-2. `fetch_patent`：请求对应 Google Patents HTML 页面
+2. `fetch_patent`：请求对应 Google Patents HTML 页面；临时网络/服务错误有限次重试
 3. `extract_patent`：尝试提取标题、摘要、第一项权利要求
-4. `generate_explanation`：给 AI 明确的技术解读规则，要求标明依据
-5. `to_markdown`：导出报告及原文
+4. `make_manual_patent`：在网页暂时不可用时接收人工核对的原文内容
+5. `generate_explanation`：给 AI 明确的技术解读规则，要求标明依据
+6. `to_markdown`：导出报告及原文
 
 `app.py` 是本地 Streamlit 网页界面。这个本地服务包括 Python 执行逻辑，但不需要独立前后端工程、数据库、部署或多 Agent。
 

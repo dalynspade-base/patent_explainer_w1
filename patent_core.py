@@ -6,6 +6,7 @@ This parser intentionally fails clearly if core fields cannot be extracted.
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -79,17 +80,47 @@ def extract_patent(html: str, patent_id: str) -> PatentRecord:
     )
 
 
+def make_manual_patent(patent_id: str, title: str, abstract: str, first_claim: str = "") -> PatentRecord:
+    title = _squash(title)
+    abstract = _squash(abstract)
+    if not title or not abstract:
+        raise ValueError("手动输入时，标题和摘要不能为空。")
+    return PatentRecord(
+        patent_id=patent_id,
+        title=title,
+        abstract=abstract,
+        first_claim=_squash(first_claim),
+        source_url=f"https://patents.google.com/patent/{patent_id}/en",
+    )
+
+
 def fetch_patent(patent_id: str) -> PatentRecord:
     url = f"https://patents.google.com/patent/{patent_id}/en"
-    try:
-        response = requests.get(
-            url,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; W1PatentExplainer/0.1; educational project)"},
-            timeout=20,
-        )
-        response.raise_for_status()
-    except requests.RequestException as err:
-        raise RuntimeError(f"无法获取专利页面：{err}") from err
+    for attempt in range(3):
+        try:
+            response = requests.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; W1PatentExplainer/0.1; educational project)"},
+                timeout=20,
+            )
+            response.raise_for_status()
+            break
+        except requests.RequestException as err:
+            status = err.response.status_code if isinstance(err, requests.HTTPError) and err.response is not None else None
+            retryable = status in {429, 500, 502, 503, 504} or isinstance(
+                err, (requests.ConnectionError, requests.Timeout)
+            )
+            if retryable and attempt < 2:
+                time.sleep(attempt + 1)
+                continue
+            if status == 503:
+                raise RuntimeError(
+                    "Google Patents 暂时返回 503，已重试 3 次。请稍后重试，"
+                    "或切换到“手动粘贴原文”，填入标题和摘要继续分析。"
+                ) from err
+            if status == 404:
+                raise RuntimeError("Google Patents 未找到该专利，请核对公开号。") from err
+            raise RuntimeError(f"无法获取专利页面：{err}。可切换到“手动粘贴原文”继续分析。") from err
     if len(response.content) > 15_000_000:
         raise RuntimeError("页面内容过大，已停止处理。")
     return extract_patent(response.text, patent_id)

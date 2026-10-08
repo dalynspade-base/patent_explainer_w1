@@ -5,7 +5,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from patent_core import (
-    fetch_patent, generate_explanation, normalize_patent_id, to_markdown,
+    fetch_patent, generate_explanation, make_manual_patent, normalize_patent_id, to_markdown,
 )
 
 load_dotenv()
@@ -30,12 +30,26 @@ patent_input = st.text_input(
     value="US7654321B2",
     help="例：US7654321B2、CN112345678A，或对应 Google Patents 链接。",
 )
+source_mode = st.radio("专利内容来源", ("自动获取", "手动粘贴原文"), horizontal=True)
+if source_mode == "手动粘贴原文":
+    st.caption("当 Google Patents 暂时不可用时，从原文页面复制标题、摘要和第一项权利要求。请核对公开号与粘贴内容一致。")
+    try:
+        manual_id = normalize_patent_id(patent_input)
+        st.link_button("打开原文页面", f"https://patents.google.com/patent/{manual_id}/en")
+    except ValueError:
+        pass
+    manual_title = st.text_input("专利标题")
+    manual_abstract = st.text_area("摘要", height=150)
+    manual_claim = st.text_area("第一项权利要求（可选）", height=180)
 
 if st.button("开始分析", type="primary"):
     try:
         patent_id = normalize_patent_id(patent_input)
-        with st.spinner("正在获取并检查专利文本..."):
-            record = fetch_patent(patent_id)
+        if source_mode == "手动粘贴原文":
+            record = make_manual_patent(patent_id, manual_title, manual_abstract, manual_claim)
+        else:
+            with st.spinner("正在获取并检查专利文本..."):
+                record = fetch_patent(patent_id)
         st.session_state["record"] = record
         st.session_state["explanation"] = ""
         if api_key:
